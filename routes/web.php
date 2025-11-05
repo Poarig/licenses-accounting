@@ -27,6 +27,7 @@ Route::middleware(['auth'])->group(function () {
     
     // Pincodes
     Route::get('/licenses/{license}/pincodes', [PincodeController::class, 'index'])->name('pincodes.index');
+    Route::get('/actions/{action}/download-file', [PincodeController::class, 'downloadFile'])->name('pincodes.download-file');
     
     // Profile
     Route::get('/profile', [ProfileController::class, 'index'])->name('profile.index');
@@ -34,6 +35,7 @@ Route::middleware(['auth'])->group(function () {
     
     // Actions (History)
     Route::get('/actions', [ActionController::class, 'index'])->name('actions.index');
+
     
     // Users (только для администраторов) - ДОБАВЛЯЕМ MIDDLEWARE admin
     Route::middleware(['admin'])->group(function () {

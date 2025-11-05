@@ -10,7 +10,8 @@ class Action extends Model
     use HasFactory;
 
     protected $fillable = [
-        'pincode_id', 'user_id', 'action_type', 'device_information', 'comment'
+        'pincode_id', 'user_id', 'action_type', 'device_information', 
+        'comment', 'file_data', 'file_name'
     ];
 
     public function pincode()
@@ -23,21 +24,25 @@ class Action extends Model
         return $this->belongsTo(User::class);
     }
 
-    // Accessor для удобного отображения типа действия
     public function getActionTypeLabelAttribute()
     {
         $labels = [
-            'adding' => 'Добавление',
-            'activation' => 'Активация',
-            'deactivation' => 'Дезактивация',
+            'добавлен' => 'Добавлен',
+            'активирован' => 'Активирован',
+            'дезактивирован' => 'Дезактивирован',
         ];
 
         return $labels[$this->action_type] ?? $this->action_type;
     }
 
-    // Scope для фильтрации по типу действия
     public function scopeOfType($query, $type)
     {
         return $query->where('action_type', $type);
+    }
+
+    // Проверка наличия файла
+    public function hasFile()
+    {
+        return !empty($this->file_data);
     }
 }

@@ -131,21 +131,15 @@ class PincodeController extends Controller
             'status' => 'required|in:nonactivated,active,used',
             'comment' => 'nullable|string|max:1000',
             'device_information' => 'nullable|string|max:1000',
+            'file' => 'nullable|file|max:10240',
         ]);
 
-        // Исправляем логику проверки устройства
         $validator->after(function ($validator) use ($request) {
             if ($request->status === 'active' && empty($request->device_information)) {
                 $validator->errors()->add(
                     'device_information', 
                     'Информация об устройстве обязательна при активации пинкода'
                 );
-            }
-
-            // Для деактивации устройство не обязательно
-            if ($request->status === 'used' && !empty($request->device_information)) {
-                // Можно очистить или оставить - зависит от бизнес-логики
-                // Оставляем как есть, так как это может быть полезно для истории
             }
         });
 
@@ -160,13 +154,12 @@ class PincodeController extends Controller
             DB::beginTransaction();
 
             $pincode = Pincode::find($request->pincode_id);
-            $oldStatus = $pincode->status;
 
             // Обновляем статус пинкода
             $pincode->status = $request->status;
             $pincode->save();
 
-            // Исправляем логику определения типа действия
+            // Определяем тип действия
             $actionType = '';
             switch ($request->status) {
                 case 'active':
@@ -176,7 +169,6 @@ class PincodeController extends Controller
                     $actionType = 'дезактивирован';
                     break;
                 case 'nonactivated':
-                    // Для сброса статуса используем более подходящее действие
                     $actionType = 'сброшен';
                     break;
             }
@@ -193,6 +185,29 @@ class PincodeController extends Controller
                 $actionData['device_information'] = $request->device_information;
             }
 
+            // Обрабатываем загрузку файла
+            if ($request->hasFile('file')) {
+                $file = $request->file('file');
+
+                // Читаем содержимое файла как бинарные данные
+                $fileContent = file_get_contents($file->getRealPath());
+
+                // Для текстовых файлов проверяем и конвертируем в UTF-8 если нужно
+                $extension = strtolower($file->getClientOriginalExtension());
+                if (in_array($extension, ['txt', 'csv', 'log'])) {
+                    // Определяем кодировку файла
+                    $encoding = mb_detect_encoding($fileContent, ['UTF-8', 'Windows-1251', 'ISO-8859-1', 'ASCII'], true);
+
+                    // Если не UTF-8, конвертируем
+                    if ($encoding !== 'UTF-8' && $encoding !== false) {
+                        $fileContent = mb_convert_encoding($fileContent, 'UTF-8', $encoding);
+                    }
+                }
+
+                $actionData['file_data'] = $fileContent;
+                $actionData['file_name'] = $file->getClientOriginalName();
+            }
+
             Action::create($actionData);
 
             DB::commit();
@@ -205,10 +220,58 @@ class PincodeController extends Controller
 
         } catch (\Exception $e) {
             DB::rollBack();
+            \Log::error('Error changing status: ' . $e->getMessage());
             return response()->json([
                 'success' => false,
                 'message' => 'Ошибка изменения статуса: ' . $e->getMessage()
             ], 500);
+        }
+    }
+
+    public function downloadFile($actionId)
+    {
+        try {
+            $action = Action::findOrFail($actionId);
+
+            if (!$action->file_data) {
+                abort(404, 'Файл не найден');
+            }
+
+            // Определяем MIME-тип по расширению файла
+            $extension = strtolower(pathinfo($action->file_name, PATHINFO_EXTENSION));
+            $mimeTypes = [
+                'pdf' => 'application/pdf',
+                'doc' => 'application/msword',
+                'docx' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                'txt' => 'text/plain; charset=utf-8',
+                'jpg' => 'image/jpeg',
+                'jpeg' => 'image/jpeg',
+                'png' => 'image/png',
+                'zip' => 'application/zip',
+                'rar' => 'application/vnd.rar',
+                'liq' => 'application/octet-stream'
+            ];
+
+            $contentType = $mimeTypes[$extension] ?? 'application/octet-stream';
+
+            $headers = [
+                'Content-Type' => $contentType,
+                'Content-Disposition' => 'attachment; filename="' . $action->file_name . '"',
+            ];
+
+            // Используем streamDownload для корректной обработки бинарных данных
+            return response()->streamDownload(function () use ($action) {
+                $fileData = $action->file_data;
+                if (is_resource($fileData)) {
+                    fpassthru($fileData);
+                } else {
+                    echo $fileData;
+                }
+            }, $action->file_name, $headers);
+
+        } catch (\Exception $e) {
+            \Log::error('Error downloading file: ' . $e->getMessage());
+            abort(500, 'Ошибка при загрузке файла: ' . $e->getMessage());
         }
     }
 }

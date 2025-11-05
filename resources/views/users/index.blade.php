@@ -238,6 +238,7 @@ $(document).ready(function() {
         // Для PUT запросов добавляем параметр _method
         if (method === 'PUT') {
             formData.append('_method', 'PUT');
+            formData.append('_token', '{{ csrf_token() }}')
         }
 
         // Логируем данные формы для отладки

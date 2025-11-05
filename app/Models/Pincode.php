@@ -1,0 +1,66 @@
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+
+class Pincode extends Model
+{
+    use HasFactory;
+
+    protected $fillable = ['license_id', 'value', 'status', 'type'];
+
+    protected $casts = [
+        'status' => 'string',
+        'type' => 'string'
+    ];
+
+    public function license()
+    {
+        return $this->belongsTo(License::class);
+    }
+
+    public function actions()
+    {
+        return $this->hasMany(Action::class);
+    }
+
+    // Получаем информацию об устройстве из последней активации
+    public function getDeviceInformationAttribute()
+    {
+        $activationAction = $this->actions()
+            ->where('action_type', 'активирован')
+            ->whereNotNull('device_information')
+            ->where('device_information', '!=', '')
+            ->latest()
+            ->first();
+    
+        return $activationAction ? $activationAction->device_information : '';
+    }
+
+    // Получаем последнее действие активации
+    public function getLastActivationActionAttribute()
+    {
+        return $this->actions()
+            ->where('action_type', 'активирован')
+            ->latest()
+            ->first();
+    }
+
+    // Helper methods for type
+    public function isSingleUser()
+    {
+        return $this->type === 'single';
+    }
+
+    public function isMultiUser()
+    {
+        return $this->type === 'multi';
+    }
+
+    public function getTypeLabel()
+    {
+        return $this->isSingleUser() ? 'Однопользовательский' : 'Многопользовательский';
+    }
+}

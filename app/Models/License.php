@@ -4,10 +4,11 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class License extends Model
 {
-    use HasFactory;
+    use HasFactory, SoftDeletes;
 
     protected $fillable = [
         'product_id', 'max_count', 'archive_data', 'archive_name', 
@@ -18,19 +19,38 @@ class License extends Model
         'max_count' => 'integer',
     ];
 
+    protected static function boot()
+    {
+        parent::boot();
+
+        static::deleting(function($license) {
+            // Мягкое удаление всех связанных пинкодов
+            if ($license->isForceDeleting()) {
+                $license->pincodes()->withTrashed()->forceDelete();
+            } else {
+                $license->pincodes()->delete();
+            }
+        });
+
+        static::restoring(function($license) {
+            // При восстановлении лицензии НЕ восстанавливаем пинкоды автоматически
+        });
+    }
+
+
     public function organization()
     {
-        return $this->belongsTo(Organization::class);
+        return $this->belongsTo(Organization::class)->withTrashed();
     }
 
     public function product()
     {
-        return $this->belongsTo(Product::class);
+        return $this->belongsTo(Product::class)->withTrashed();
     }
 
     public function pincodes()
     {
-        return $this->hasMany(Pincode::class);
+        return $this->hasMany(Pincode::class)->withTrashed();
     }
 
     public function singleUserPincodes()

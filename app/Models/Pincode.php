@@ -4,10 +4,11 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Pincode extends Model
 {
-    use HasFactory;
+    use HasFactory, SoftDeletes;
 
     protected $fillable = ['license_id', 'value', 'status', 'type'];
 
@@ -18,7 +19,7 @@ class Pincode extends Model
 
     public function license()
     {
-        return $this->belongsTo(License::class);
+        return $this->belongsTo(License::class)->withTrashed();
     }
 
     public function actions()

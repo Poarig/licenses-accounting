@@ -3,9 +3,22 @@
 @section('content')
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h1>Организации</h1>
-    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addOrganizationModal">
-        Добавить организацию
-    </button>
+    <div>
+        @if(auth()->user()->isAdmin())
+            @if(isset($showDeleted) && $showDeleted)
+                <a href="{{ route('organizations.index') }}" class="btn btn-secondary me-2">
+                    Не удалённые записи
+                </a>
+            @else
+                <a href="{{ route('organizations.deleted') }}" class="btn btn-warning me-2">
+                    Удалённые записи
+                </a>
+            @endif
+        @endif
+        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#organizationModal">
+            Добавить организацию
+        </button>
+    </div>
 </div>
 
 <div class="table-responsive">
@@ -19,19 +32,39 @@
         </thead>
         <tbody>
             @foreach($organizations as $organization)
-            <tr>
+            <tr class="{{ isset($showDeleted) && $showDeleted ? 'table-danger' : '' }}">
                 <td>{{ $organization->id }}</td>
-                <td class="editable" 
-                    data-id="{{ $organization->id }}"
-                    data-field="name"
-                    data-value="{{ $organization->name }}">
-                    {{ $organization->name }}
+                <td>
+                    @if(!isset($showDeleted) || !$showDeleted)
+                        <span class="editable" data-field="name" data-id="{{ $organization->id }}">
+                            {{ $organization->name }}
+                        </span>
+                    @else
+                        {{ $organization->name }}
+                    @endif
                 </td>
                 <td>
-                    <a href="{{ route('licenses.organization', $organization) }}" 
-                       class="btn btn-sm btn-outline-primary">
-                        Лицензии
-                    </a>
+                    @if(isset($showDeleted) && $showDeleted)
+                        <td>{{ $organization->deleted_at->timezone('Europe/Moscow')->format('d.m.Y H:i') }}</td>
+                        <td>
+                            <button class="btn btn-sm btn-success restore-organization" data-id="{{ $organization->id }}">
+                                Восстановить
+                            </button>
+                        </td>
+                    @else
+                        <td>
+                            <a href="{{ route('licenses.organization', $organization) }}" class="btn btn-sm btn-outline-primary">
+                                Лицензии
+                            </a>
+                            @if(auth()->user()->isAdmin())
+                                <button class="btn btn-sm btn-danger delete-organization" 
+                                        data-id="{{ $organization->id }}" 
+                                        data-name="{{ $organization->name }}">
+                                    Удалить
+                                </button>
+                            @endif
+                        </td>
+                    @endif
                 </td>
             </tr>
             @endforeach
@@ -60,6 +93,26 @@
                     <button type="submit" class="btn btn-primary">Сохранить</button>
                 </div>
             </form>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно подтверждения удаления -->
+<div class="modal fade" id="deleteOrganizationModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Подтверждение удаления</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Вы уверены, что хотите удалить организацию <strong id="deleteOrganizationName"></strong>?</p>
+                <p class="text-muted">Организация будет помечена как удаленная и не будет отображаться в основном списке.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                <button type="button" class="btn btn-danger" id="confirmOrganizationDelete">Удалить</button>
+            </div>
         </div>
     </div>
 </div>
@@ -205,6 +258,67 @@ $(document).ready(function() {
     $('#name').on('input', function() {
         $(this).removeClass('is-invalid');
         $(this).siblings('.invalid-feedback').text('');
+    });
+
+    let currentOrganizationId = null;
+
+    // Подтверждение удаления организации
+    $(document).on('click', '.delete-organization', function() {
+        currentOrganizationId = $(this).data('id');
+        const organizationName = $(this).data('name');
+        $('#deleteOrganizationName').text(organizationName);
+        $('#deleteOrganizationModal').modal('show');
+    });
+
+    $('#confirmOrganizationDelete').click(function() {
+        if (currentOrganizationId) {
+            $.ajax({
+                url: `/organizations/${currentOrganizationId}`,
+                method: 'DELETE',
+                data: {
+                    _token: '{{ csrf_token() }}'
+                },
+                success: function(response) {
+                    if (response.success) {
+                        $('#deleteOrganizationModal').modal('hide');
+                        showNotification(response.message, 'success');
+                        setTimeout(() => {
+                            window.location.reload();
+                        }, 1000);
+                    }
+                },
+                error: function(xhr) {
+                    const error = xhr.responseJSON?.message || 'Произошла ошибка при удалении';
+                    showNotification(error, 'error');
+                }
+            });
+        }
+    });
+
+    // Восстановление организации
+    $(document).on('click', '.restore-organization', function() {
+        const organizationId = $(this).data('id');
+        
+        if (confirm('Вы уверены, что хотите восстановить эту организацию?')) {
+            $.ajax({
+                url: `/organizations/${organizationId}/restore`,
+                method: 'POST',
+                data: {
+                    _token: '{{ csrf_token() }}'
+                },
+                success: function(response) {
+                    if (response.success) {
+                        showNotification(response.message, 'success');
+                        setTimeout(() => {
+                            window.location.reload();
+                        }, 1000);
+                    }
+                },
+                error: function(xhr) {
+                    showNotification('Произошла ошибка при восстановлении', 'error');
+                }
+            });
+        }
     });
 });
 

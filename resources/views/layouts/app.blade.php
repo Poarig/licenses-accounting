@@ -48,6 +48,10 @@
                         <a class="nav-link {{ request()->routeIs('actions.index') ? 'active' : '' }}" 
                            href="{{ route('actions.index') }}">История</a>
                     </li>
+                    <li class="nav-item">
+                        <a class="nav-link {{ request()->routeIs('products.index') ? 'active' : '' }}" 
+                           href="{{ route('products.index') }}">Продукты</a>
+                    </li>
                     @if(auth()->user()->isAdmin())
                     <li class="nav-item">
                         <a class="nav-link {{ request()->routeIs('users.index') ? 'active' : '' }}" 

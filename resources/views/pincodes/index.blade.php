@@ -4,6 +4,17 @@
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h1>Пинкоды лицензии: {{ $license->number }}</h1>
     <div>
+        @if(auth()->user()->isAdmin())
+            @if(isset($showDeleted) && $showDeleted)
+                <a href="{{ route('pincodes.index', $license) }}" class="btn btn-secondary me-2">
+                    Не удалённые записи
+                </a>
+            @else
+                <a href="{{ route('pincodes.deleted', $license) }}" class="btn btn-warning me-2">
+                    Удалённые записи
+                </a>
+            @endif
+        @endif
         <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addPincodesModal">
             Добавить пинкоды
         </button>
@@ -30,7 +41,7 @@
                 </thead>
                 <tbody>
                     @foreach($pincodes as $pincode)
-                    <tr>
+                    <tr class="{{ isset($showDeleted) && $showDeleted ? 'table-danger' : '' }}">
                         <td>{{ $pincode->id }}</td>
                         <td><code>{{ $pincode->value }}</code></td>
                         <td>
@@ -55,7 +66,6 @@
                         <td>{{ $pincode->device_information ?? '—' }}</td>
                         <td>
                             @php
-                                // Получаем действие активации с файлом для этого пинкода
                                 $activationAction = $pincode->actions()
                                     ->where('action_type', 'активирован')
                                     ->whereNotNull('file_data')
@@ -74,12 +84,30 @@
                             @endif
                         </td>
                         <td>
-                            <button class="btn btn-sm btn-outline-primary change-status" 
-                                    data-pincode-id="{{ $pincode->id }}"
-                                    data-current-status="{{ $pincode->status }}"
-                                    data-device-info="{{ $pincode->device_information ?? '' }}">
-                                Изменить статус
-                            </button>
+                            @if(isset($showDeleted) && $showDeleted)
+                                <td>{{ $pincode->deleted_at->timezone('Europe/Moscow')->format('d.m.Y H:i') }}</td>
+                                <td>
+                                    <button class="btn btn-sm btn-success restore-pincode" data-id="{{ $pincode->id }}">
+                                        Восстановить
+                                    </button>
+                                </td>
+                            @else
+                                <td>
+                                    <button class="btn btn-sm btn-outline-primary change-status" 
+                                            data-pincode-id="{{ $pincode->id }}"
+                                            data-current-status="{{ $pincode->status }}"
+                                            data-device-info="{{ $pincode->device_information ?? '' }}">
+                                        Изменить статус
+                                    </button>
+                                    @if(auth()->user()->isAdmin())
+                                        <button class="btn btn-sm btn-danger delete-pincode" 
+                                                data-id="{{ $pincode->id }}" 
+                                                data-value="{{ $pincode->value }}">
+                                            Удалить
+                                        </button>
+                                    @endif
+                                </td>
+                            @endif
                         </td>
                     </tr>
                     @endforeach
@@ -175,6 +203,27 @@
         </div>
     </div>
 </div>
+
+<!-- Модальное окно подтверждения удаления -->
+<div class="modal fade" id="deletePincodeModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Подтверждение удаления</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Вы уверены, что хотите удалить пинкод <strong id="deletePincodeName"></strong>?</p>
+                <p class="text-muted">Пинкод будет помечена как удаленная и не будет отображаться в основном списке.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                <button type="button" class="btn btn-danger" id="confirmPincodeDelete">Удалить</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 @endsection
 
 @section('scripts')
@@ -309,6 +358,8 @@ $(document).ready(function() {
                 }
             }
         });
+
+        
     });
 
     // Обработка скачивания файла
@@ -358,6 +409,66 @@ $(document).ready(function() {
             $alert.alert('close');
         }, 5000);
     }
+
+    let currentPincodeId = null;
+
+    // Подтверждение удаления пинкода
+    $(document).on('click', '.delete-pincode', function() {
+        currentPincodeId = $(this).data('id');
+        const pincodeName = $(this).data('name');
+        $('#deletePincodeName').text(pincodeName);
+        $('#deletePincodeModal').modal('show');
+    });
+
+    $('#confirmPincodeDelete').click(function() {
+        if (currentPincodeId) {
+            $.ajax({
+                url: `/pincodes/${currentPincodeId}`,
+                method: 'DELETE',
+                data: {
+                    _token: '{{ csrf_token() }}'
+                },
+                success: function(response) {
+                    if (response.success) {
+                        $('#deletePincodeModal').modal('hide');
+                        showNotification(response.message, 'success');
+                        setTimeout(() => {
+                            window.location.reload();
+                        }, 1000);
+                    }
+                },
+                error: function(xhr) {
+                    const error = xhr.responseJSON?.message || 'Произошла ошибка при удалении';
+                    showNotification(error, 'error');
+                }
+            });
+        }
+    });
+
+    // Восстановление пинкода
+    $(document).on('click', '.restore-pincode', function() {
+        const pincodeId = $(this).data('id');
+        if (confirm('Вы уверены, что хотите восстановить этот пинкод?')) {
+            $.ajax({
+                url: `/pincodes/${pincodeId}/restore`,
+                method: 'POST',
+                data: {
+                    _token: '{{ csrf_token() }}'
+                },
+                success: function(response) {
+                    if (response.success) {
+                        showNotification(response.message, 'success');
+                        setTimeout(() => {
+                            window.location.reload();
+                        }, 1000);
+                    }
+                },
+                error: function(xhr) {
+                    showNotification('Произошла ошибка при восстановлении', 'error');
+                }
+            });
+        }
+    });
 
     // Инициализация при загрузке страницы
     toggleFieldsBasedOnStatus($('#change_status').val());

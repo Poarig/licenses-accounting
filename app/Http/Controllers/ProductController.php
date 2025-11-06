@@ -2,23 +2,24 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Organization;
+use App\Models\Product;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 
-class OrganizationController extends Controller
+class ProductController extends Controller
 {
     public function index()
     {
-        $organizations = Organization::whereNull('deleted_at')->get();
-        return view('organizations.index', compact('organizations'));
+        $products = Product::whereNull('deleted_at')->get();
+        return view('products.index', compact('products'));
     }
 
     public function store(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'name' => 'required|string|max:255|unique:organizations,name',
+            'name' => 'required|string|max:255|unique:products,name',
+            'description' => 'nullable|string|max:1000',
         ]);
 
         if ($validator->fails()) {
@@ -31,32 +32,37 @@ class OrganizationController extends Controller
         try {
             DB::beginTransaction();
 
-            Organization::create([
-                'name' => $request->name
+            Product::create([
+                'name' => $request->name,
+                'description' => $request->description
             ]);
 
             DB::commit();
 
             return response()->json([
                 'success' => true, 
-                'message' => 'Организация успешно добавлена'
+                'message' => 'Продукт успешно добавлен'
             ]);
 
         } catch (\Exception $e) {
             DB::rollBack();
             return response()->json([
                 'success' => false,
-                'message' => 'Ошибка при добавлении организации: ' . $e->getMessage()
+                'message' => 'Ошибка при добавлении продукта: ' . $e->getMessage()
             ], 500);
         }
     }
 
-    public function updateField(Request $request, Organization $organization)
+    public function updateField(Request $request, Product $product)
     {
         $validator = Validator::make($request->all(), [
-            'field' => 'required|in:name',
-            'value' => 'required|string|max:255|unique:organizations,name,' . $organization->id,
+            'field' => 'required|in:name,description',
+            'value' => 'required|string|max:255',
         ]);
+
+        if ($request->field === 'name') {
+            $validator->addRules(['value' => 'required|string|max:255|unique:products,name,' . $product->id]);
+        }
 
         if ($validator->fails()) {
             return response()->json([
@@ -69,14 +75,14 @@ class OrganizationController extends Controller
             DB::beginTransaction();
 
             $field = $request->field;
-            $organization->$field = $request->value;
-            $organization->save();
+            $product->$field = $request->value;
+            $product->save();
 
             DB::commit();
 
             return response()->json([
                 'success' => true, 
-                'message' => 'Данные обновлены'
+                'message' => 'Данные продукта обновлены'
             ]);
 
         } catch (\Exception $e) {
@@ -88,7 +94,7 @@ class OrganizationController extends Controller
         }
     }
 
-     public function destroy(Organization $organization)
+    public function destroy(Product $product)
     {
         if (!auth()->user()->isAdmin()) {
             return response()->json([
@@ -100,20 +106,20 @@ class OrganizationController extends Controller
         try {
             DB::beginTransaction();
 
-            $organization->delete();
+            $product->delete();
 
             DB::commit();
 
             return response()->json([
                 'success' => true, 
-                'message' => 'Организация удалена'
+                'message' => 'Продукт удален'
             ]);
 
         } catch (\Exception $e) {
             DB::rollBack();
             return response()->json([
                 'success' => false,
-                'message' => 'Ошибка при удалении организации: ' . $e->getMessage()
+                'message' => 'Ошибка при удалении продукта: ' . $e->getMessage()
             ], 500);
         }
     }
@@ -130,21 +136,21 @@ class OrganizationController extends Controller
         try {
             DB::beginTransaction();
 
-            $organization = Organization::withTrashed()->findOrFail($id);
-            $organization->restore();
+            $product = Product::withTrashed()->findOrFail($id);
+            $product->restore();
 
             DB::commit();
 
             return response()->json([
                 'success' => true, 
-                'message' => 'Организация восстановлена'
+                'message' => 'Продукт восстановлен'
             ]);
 
         } catch (\Exception $e) {
             DB::rollBack();
             return response()->json([
                 'success' => false,
-                'message' => 'Ошибка при восстановлении организации: ' . $e->getMessage()
+                'message' => 'Ошибка при восстановлении продукта: ' . $e->getMessage()
             ], 500);
         }
     }
@@ -155,7 +161,7 @@ class OrganizationController extends Controller
             abort(403, 'Доступ запрещен');
         }
     
-        $organizations = Organization::onlyTrashed()->get();
-        return view('organizations.index', compact('organizations'))->with('showDeleted', true);
+        $products = Product::onlyTrashed()->get();
+        return view('products.index', compact('products'))->with('showDeleted', true);
     }
 }

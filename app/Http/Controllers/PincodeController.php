@@ -13,11 +13,16 @@ class PincodeController extends Controller
 {
     public function index(License $license)
     {
-        $pincodes = Pincode::with(['actions' => function($query) {
-            $query->where('action_type', 'активирован')
-                  ->whereNotNull('device_information')
-                  ->latest();
-        }])->where('license_id', $license->id)->get();
+        $pincodes = Pincode::whereHas('license', function($query) {
+                $query->whereNull('deleted_at');
+            })
+            ->with(['actions' => function($query) {
+                $query->where('action_type', 'активирован')
+                      ->whereNotNull('device_information')
+                      ->latest();
+            }])
+            ->where('license_id', $license->id)
+            ->get();
 
         return view('pincodes.index', compact('pincodes', 'license'));
     }
@@ -273,5 +278,87 @@ class PincodeController extends Controller
             \Log::error('Error downloading file: ' . $e->getMessage());
             abort(500, 'Ошибка при загрузке файла: ' . $e->getMessage());
         }
+    }
+
+    public function destroy(Pincode $pincode)
+    {
+        if (!auth()->user()->isAdmin()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Доступ запрещен'
+            ], 403);
+        }
+
+        try {
+            DB::beginTransaction();
+
+            $pincode->delete();
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true, 
+                'message' => 'Пинкод удален'
+            ]);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'success' => false,
+                'message' => 'Ошибка при удалении пинкода: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function restore($id)
+    {
+        if (!auth()->user()->isAdmin()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Доступ запрещен'
+            ], 403);
+        }
+
+        try {
+            DB::beginTransaction();
+
+            $pincode = Pincode::withTrashed()->findOrFail($id);
+            $pincode->restore();
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true, 
+                'message' => 'Пинкод восстановлен'
+            ]);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'success' => false,
+                'message' => 'Ошибка при восстановлении пинкода: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function getDeleted(License $license)
+    {
+        if (!auth()->user()->isAdmin()) {
+            abort(403, 'Доступ запрещен');
+        }
+    
+        $pincodes = Pincode::onlyTrashed()
+            ->whereHas('license', function($query) {
+                $query->whereNull('deleted_at');
+            })
+            ->with(['actions' => function($query) {
+                $query->where('action_type', 'активирован')
+                      ->whereNotNull('device_information')
+                      ->latest();
+            }])
+            ->where('license_id', $license->id)
+            ->get();
+        
+        return view('pincodes.index', compact('pincodes', 'license'))->with('showDeleted', true);
     }
 }

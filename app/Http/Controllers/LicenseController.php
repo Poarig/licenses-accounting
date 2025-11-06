@@ -15,20 +15,34 @@ class LicenseController extends Controller
 {
     public function index()
     {
-        $licenses = License::with(['organization', 'product'])->get();
-        $products = Product::all();
-        $organizations = Organization::all();
+        $licenses = License::whereHas('organization', function($query) {
+                $query->whereNull('deleted_at');
+            })
+            ->whereHas('product', function($query) {
+                $query->whereNull('deleted_at');
+            })
+            ->with(['organization', 'product'])
+            ->get();
+
+        $products = Product::whereNull('deleted_at')->get();
+        $organizations = Organization::whereNull('deleted_at')->get();
         return view('licenses.index', compact('licenses', 'products', 'organizations'));
     }
 
+
     public function organizationLicenses(Organization $organization)
     {
-        $licenses = License::with(['organization', 'product'])
-            ->where('organization_id', $organization->id)
+        $licenses = License::where('organization_id', $organization->id)
+            ->whereHas('product', function($query) {
+                $query->whereNull('deleted_at');
+            })
+            ->with(['organization', 'product'])
             ->get();
-        $products = Product::all();
+
+        $products = Product::whereNull('deleted_at')->get();
         return view('licenses.organization', compact('licenses', 'organization', 'products'));
     }
+    
 
     public function store(Request $request)
     {
@@ -255,5 +269,105 @@ class LicenseController extends Controller
                 'message' => 'Ошибка обновления: ' . $e->getMessage()
             ], 500);
         }
+    }
+
+     public function destroy(License $license)
+    {
+        if (!auth()->user()->isAdmin()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Доступ запрещен'
+            ], 403);
+        }
+
+        try {
+            DB::beginTransaction();
+
+            $license->delete();
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true, 
+                'message' => 'Лицензия удалена'
+            ]);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'success' => false,
+                'message' => 'Ошибка при удалении лицензии: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function restore($id)
+    {
+        if (!auth()->user()->isAdmin()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Доступ запрещен'
+            ], 403);
+        }
+
+        try {
+            DB::beginTransaction();
+
+            $license = License::withTrashed()->findOrFail($id);
+            $license->restore();
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true, 
+                'message' => 'Лицензия восстановлена'
+            ]);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'success' => false,
+                'message' => 'Ошибка при восстановлении лицензии: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function getDeleted()
+    {
+        if (!auth()->user()->isAdmin()) {
+            abort(403, 'Доступ запрещен');
+        }
+    
+        $licenses = License::onlyTrashed()
+            ->whereHas('organization', function($query) {
+                $query->whereNull('deleted_at');
+            })
+            ->whereHas('product', function($query) {
+                $query->whereNull('deleted_at');
+            })
+            ->with(['organization', 'product'])
+            ->get();
+        
+        $products = Product::whereNull('deleted_at')->get();
+        $organizations = Organization::whereNull('deleted_at')->get();
+        return view('licenses.index', compact('licenses', 'products', 'organizations'))->with('showDeleted', true);
+    }
+
+    public function getOrganizationDeleted(Organization $organization)
+    {
+        if (!auth()->user()->isAdmin()) {
+            abort(403, 'Доступ запрещен');
+        }
+
+        $licenses = License::onlyTrashed()
+            ->where('organization_id', $organization->id)
+            ->whereHas('product', function($query) {
+                $query->whereNull('deleted_at');
+            })
+            ->with(['organization', 'product'])
+            ->get();
+
+        $products = Product::whereNull('deleted_at')->get();
+        return view('licenses.organization', compact('licenses', 'organization', 'products'))->with('showDeleted', true);
     }
 }

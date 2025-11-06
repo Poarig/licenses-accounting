@@ -75,8 +75,13 @@
                         <td>
                             <div class="d-flex align-items-center">
                                 <div>
-                                    <div class="fw-semibold">{{ $action->user->name }} {{ $action->user->surname }}</div>
-                                    <small class="text-muted">{{ $action->user->login }}</small>
+                                    @if($action->user && !$action->user->trashed())
+                                        <div class="fw-semibold">{{ $action->user->name }} {{ $action->user->surname }}</div>
+                                        <small class="text-muted">{{ $action->user->login }}</small>
+                                    @else
+                                        <div class="fw-semibold text-muted">Удалённый пользователь</div>
+                                        <small class="text-muted">—</small>
+                                    @endif
                                 </div>
                             </div>
                         </td>

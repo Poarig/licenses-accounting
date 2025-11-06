@@ -21,7 +21,7 @@ class Action extends Model
 
     public function user()
     {
-        return $this->belongsTo(User::class);
+        return $this->belongsTo(User::class)->withTrashed();
     }
 
     public function getActionTypeLabelAttribute()
@@ -44,5 +44,21 @@ class Action extends Model
     public function hasFile()
     {
         return !empty($this->file_data);
+    }
+
+    public function getUserNameAttribute()
+    {
+        if ($this->user && !$this->user->trashed()) {
+            return $this->user->full_name;
+        }
+        return 'Удалённый пользователь';
+    }
+
+    public function getUserLoginAttribute()
+    {
+        if ($this->user && !$this->user->trashed()) {
+            return $this->user->login;
+        }
+        return '—';
     }
 }

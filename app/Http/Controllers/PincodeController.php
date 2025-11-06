@@ -354,19 +354,20 @@ class PincodeController extends Controller
                 'message' => 'Доступ запрещен'
             ], 403);
         }
-
+    
         try {
             DB::beginTransaction();
-
+        
+            // Теперь статус автоматически изменится на 'used' в событии модели
             $pincode->delete();
-
+        
             DB::commit();
-
+        
             return response()->json([
                 'success' => true, 
-                'message' => 'Пинкод удален'
+                'message' => 'Пинкод удален и деактивирован'
             ]);
-
+        
         } catch (\Exception $e) {
             DB::rollBack();
             return response()->json([

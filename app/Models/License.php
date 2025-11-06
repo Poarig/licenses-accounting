@@ -22,16 +22,20 @@ class License extends Model
     protected static function boot()
     {
         parent::boot();
-
+    
         static::deleting(function($license) {
             // Мягкое удаление всех связанных пинкодов
             if ($license->isForceDeleting()) {
                 $license->pincodes()->withTrashed()->forceDelete();
             } else {
-                $license->pincodes()->delete();
+                // Вместо массового удаления, перебираем каждый пинкод
+                // чтобы сработали события модели Pincode
+                $license->pincodes->each(function($pincode) {
+                    $pincode->delete(); // Это вызовет событие deleting для каждого пинкода
+                });
             }
         });
-
+    
         static::restoring(function($license) {
             // При восстановлении лицензии НЕ восстанавливаем пинкоды автоматически
         });

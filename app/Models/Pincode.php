@@ -17,6 +17,43 @@ class Pincode extends Model
         'type' => 'string'
     ];
 
+    protected static function boot()
+    {
+        parent::boot();
+
+        static::deleting(function($pincode) {
+            // Если это мягкое удаление, автоматически деактивируем пинкод
+            if (!$pincode->isForceDeleting()) {
+                // Сохраняем старый статус для проверки
+                $oldStatus = $pincode->status;
+                
+                // Если пинкод не был уже деактивирован, деактивируем его
+                if ($oldStatus !== 'used') {
+                    $pincode->status = 'used';
+                    
+                    // Сохраняем без вызова событий, чтобы избежать рекурсии
+                    $pincode->saveQuietly();
+
+                    // Логируем действие деактивации при удалении
+                    if (auth()->check()) {
+                        Action::create([
+                            'pincode_id' => $pincode->id,
+                            'user_id' => auth()->id(),
+                            'action_type' => 'дезактивирован',
+                            'date' => now(),
+                            'comment' => 'Пинкод автоматически деактивирован при удалении',
+                        ]);
+                    }
+                }
+            }
+        });
+
+        static::restoring(function($pincode) {
+            // При восстановлении пинкод остаётся в статусе 'used'
+            // Пользователь может вручную изменить статус при необходимости
+        });
+    }
+
     public function license()
     {
         return $this->belongsTo(License::class)->withTrashed();

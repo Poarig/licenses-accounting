@@ -20,18 +20,19 @@ class Organization extends Model
     protected static function boot()
     {
         parent::boot();
-
+    
         static::deleting(function($organization) {
             // Мягкое удаление всех связанных лицензий
             if ($organization->isForceDeleting()) {
-                // Если удаляем полностью, то удаляем и лицензии
-                $organization->getLicenses()->withTrashed()->forceDelete();
+                $organization->licenses()->withTrashed()->forceDelete();
             } else {
-                // Мягкое удаление
-                $organization->getLicenses()->delete();
+                // Перебираем каждую лицензию для запуска событий
+                $organization->licenses->each(function($license) {
+                    $license->delete(); // Это вызовет каскадное удаление пинкодов через события License
+                });
             }
         });
-
+    
         static::restoring(function($organization) {
             // При восстановлении организации НЕ восстанавливаем лицензии автоматически
         });

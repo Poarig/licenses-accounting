@@ -20,18 +20,37 @@ class Product extends Model
     protected static function boot()
     {
         parent::boot();
-
-        static::deleting(function($product) {
-            // Мягкое удаление всех связанных лицензий
-            if ($product->isForceDeleting()) {
-                $product->getLicenses()->withTrashed()->forceDelete();
-            } else {
-                $product->getLicenses()->delete();
+    
+        static::deleting(function($pincode) {
+            // Если это мягкое удаление, автоматически деактивируем пинкод
+            if (!$pincode->isForceDeleting()) {
+                // Сохраняем старый статус для проверки
+                $oldStatus = $pincode->getOriginal('status');
+                
+                // Если пинкод не был уже деактивирован, деактивируем его
+                if ($oldStatus !== 'used') {
+                    // Используем updateQuietly чтобы избежать рекурсии
+                    $pincode->updateQuietly(['status' => 'used']);
+                
+                    // Логируем действие деактивации при удалении
+                    // Проверяем, есть ли аутентифицированный пользователь
+                    // (при каскадном удалении из консоли или массовых операциях пользователь может быть не установлен)
+                    $userId = auth()->check() ? auth()->id() : null;
+                    
+                    Action::create([
+                        'pincode_id' => $pincode->id,
+                        'user_id' => $userId,
+                        'action_type' => 'дезактивирован',
+                        'date' => now(),
+                        'comment' => 'Пинкод автоматически деактивирован при удалении',
+                    ]);
+                }
             }
         });
-
-        static::restoring(function($product) {
-            // При восстановлении продукта НЕ восстанавливаем лицензии автоматически
+    
+        static::restoring(function($pincode) {
+            // При восстановлении пинкод остаётся в статусе 'used'
+            // Пользователь может вручную изменить статус при необходимости
         });
     }
 

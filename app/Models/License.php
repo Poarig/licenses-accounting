@@ -37,6 +37,59 @@ class License extends Model
         });
     }
 
+    // Получение активных однопользовательских пинкодов
+    public function getActiveSinglePincodes()
+    {
+        return $this->pincodes()
+            ->where('type', 'single')
+            ->where('status', 'active')
+            ->get();
+    }
+
+    // Получение активных многопользовательских пинкодов
+    public function getActiveMultiPincodes()
+    {
+        return $this->pincodes()
+            ->where('type', 'multi')
+            ->where('status', 'active')
+            ->get();
+    }
+
+    // Проверка, можно ли активировать новые пинкоды
+    public function canActivatePincodes()
+    {
+        $activeMulti = $this->getActiveMultiPincodes();
+
+        // Если есть активные многопользовательские пинкоды - нельзя активировать
+        if ($activeMulti->count() > 0) {
+            return false;
+        }
+
+        $activeSingle = $this->getActiveSinglePincodes();
+
+        // Если есть активные однопользовательские и пытаемся активировать многопользовательский - нельзя
+        if ($activeSingle->count() > 0) {
+            return 'single_only'; // Можно активировать только однопользовательские
+        }
+
+        // Проверка максимального количества для однопользовательских
+        if ($this->max_count !== null && $activeSingle->count() >= $this->max_count) {
+            return false;
+        }
+
+        return true;
+    }
+
+    // Получение оставшегося количества активаций
+    public function getRemainingActivations()
+    {
+        if ($this->max_count === null) {
+            return 'не ограничено';
+        }
+
+        $activeSingleCount = $this->getActiveSinglePincodes()->count();
+        return max(0, $this->max_count - $activeSingleCount);
+    }
 
     public function organization()
     {

@@ -159,6 +159,79 @@ class PincodeController extends Controller
             DB::beginTransaction();
 
             $pincode = Pincode::find($request->pincode_id);
+            $license = $pincode->license;
+
+            // Проверки только при активации
+            if ($request->status === 'active') {
+                // Получаем активные пинкоды лицензии
+                $activePincodes = $license->pincodes()
+                    ->where('status', 'active')
+                    ->get();
+
+                $activeSinglePincodes = $activePincodes->where('type', 'single');
+                $activeMultiPincodes = $activePincodes->where('type', 'multi');
+
+                // Проверка 1: Если активирован многопользовательский пинкод - никакие другие нельзя активировать
+                if ($activeMultiPincodes->count() > 0) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Невозможно активировать пинкод. В лицензии уже активирован многопользовательский пинкод.'
+                    ], 422);
+                }
+
+                // Проверка 2: Если активируем многопользовательский пинкод
+                if ($pincode->isMultiUser()) {
+                    // Нельзя активировать, если есть активные однопользовательские пинкоды
+                    if ($activeSinglePincodes->count() > 0) {
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'Невозможно активировать многопользовательский пинкод. В лицензии уже есть активные однопользовательские пинкоды.'
+                        ], 422);
+                    }
+
+                    // Нельзя активировать, если есть другие активные многопользовательские пинкоды
+                    if ($activeMultiPincodes->count() > 0) {
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'Невозможно активировать многопользовательский пинкод. В лицензии уже есть активный многопользовательский пинкод.'
+                        ], 422);
+                    }
+                }
+
+                // Проверка 3: Если активируем однопользовательский пинкод
+                if ($pincode->isSingleUser()) {
+                    // Нельзя активировать, если есть активные многопользовательские пинкоды
+                    if ($activeMultiPincodes->count() > 0) {
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'Невозможно активировать однопользовательский пинкод. В лицензии уже активирован многопользовательский пинкод.'
+                        ], 422);
+                    }
+
+                    // Проверка максимального количества однопользовательских активаций
+                    if ($license->max_count !== null) {
+                        $currentActiveSingleCount = $activeSinglePincodes->count();
+
+                        // Если текущий пинкод уже активен, не учитываем его в подсчете
+                        if ($pincode->status === 'active') {
+                            $currentActiveSingleCount--;
+                        }
+
+                        if ($currentActiveSingleCount >= $license->max_count) {
+                            return response()->json([
+                                'success' => false,
+                                'message' => "Невозможно активировать пинкод. Достигнуто максимальное количество активаций ({$license->max_count}) для этой лицензии."
+                            ], 422);
+                        }
+                    }
+                }
+            }
+
+            \Log::info('Changing pincode status', [
+                'pincode_id' => $pincode->id,
+                'old_status' => $pincode->status,
+                'new_status' => $request->status
+            ]);
 
             // Обновляем статус пинкода
             $pincode->status = $request->status;
@@ -194,28 +267,21 @@ class PincodeController extends Controller
             if ($request->hasFile('file')) {
                 $file = $request->file('file');
 
-                // Читаем содержимое файла как бинарные данные
+                // Читаем содержимое файла и кодируем в base64
                 $fileContent = file_get_contents($file->getRealPath());
 
-                // Для текстовых файлов проверяем и конвертируем в UTF-8 если нужно
-                $extension = strtolower($file->getClientOriginalExtension());
-                if (in_array($extension, ['txt', 'csv', 'log'])) {
-                    // Определяем кодировку файла
-                    $encoding = mb_detect_encoding($fileContent, ['UTF-8', 'Windows-1251', 'ISO-8859-1', 'ASCII'], true);
-
-                    // Если не UTF-8, конвертируем
-                    if ($encoding !== 'UTF-8' && $encoding !== false) {
-                        $fileContent = mb_convert_encoding($fileContent, 'UTF-8', $encoding);
-                    }
-                }
-
-                $actionData['file_data'] = $fileContent;
+                $actionData['file_data'] = base64_encode($fileContent);
                 $actionData['file_name'] = $file->getClientOriginalName();
             }
 
             Action::create($actionData);
 
             DB::commit();
+
+            \Log::info('Status changed successfully', [
+                'pincode_id' => $pincode->id, 
+                'status' => $pincode->status
+            ]);
 
             return response()->json([
                 'success' => true, 

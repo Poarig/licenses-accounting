@@ -4,6 +4,17 @@
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h1>Лицензии организации: {{ $organization->name }}</h1>
     <div>
+        @if(auth()->user()->isAdmin())
+            @if(isset($showDeleted) && $showDeleted)
+                <a href="{{ route('licenses.organization', $organization) }}" class="btn btn-secondary me-2">
+                    Не удалённые записи
+                </a>
+            @else
+                <a href="{{ route('licenses.organization.deleted', $organization) }}" class="btn btn-warning me-2">
+                    Удалённые записи
+                </a>
+            @endif
+        @endif
         <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#licenseModal">
             Добавить лицензию
         </button>
@@ -29,29 +40,41 @@
                 </thead>
                 <tbody>
                     @foreach($licenses as $license)
-                    <tr>
+                    <tr class="{{ isset($showDeleted) && $showDeleted ? 'table-danger' : '' }}">
                         <td>{{ $license->id }}</td>
                         <td>
-                            <span class="editable" data-field="number" data-id="{{ $license->id }}">
+                            @if(!isset($showDeleted) || !$showDeleted)
+                                <span class="editable" data-field="number" data-id="{{ $license->id }}">
+                                    {{ $license->number }}
+                                </span>
+                            @else
                                 {{ $license->number }}
-                            </span>
+                            @endif
                         </td>
                         <td>
-                            <span class="editable" data-field="product_id" data-id="{{ $license->id }}" data-value="{{ $license->product_id }}">
+                            @if(!isset($showDeleted) || !$showDeleted)
+                                <span class="editable" data-field="product_id" data-id="{{ $license->id }}" data-value="{{ $license->product_id }}">
+                                    {{ $license->product->name }}
+                                </span>
+                            @else
                                 {{ $license->product->name }}
-                            </span>
+                            @endif
                         </td>
                         <td>
-                            <span class="editable" data-field="max_count" data-id="{{ $license->id }}">
+                            @if(!isset($showDeleted) || !$showDeleted)
+                                <span class="editable" data-field="max_count" data-id="{{ $license->id }}">
+                                    {{ $license->max_count ?? '—' }}
+                                </span>
+                            @else
                                 {{ $license->max_count ?? '—' }}
-                            </span>
+                            @endif
                         </td>
                         <td>
                             @if($license->hasFile())
                                 <a href="{{ route('licenses.download-file', $license) }}" 
                                    class="btn btn-sm btn-outline-success download-file-link"
-                                   title="Скачать {{ $license->archive_name }} ({{ $license->getFileSizeFormatted() }})">
-                                    <i class="bi bi-download"></i> {{ $license->archive_name }}
+                                   title="Скачать {{ $license->file_name }} ({{ $license->getFileSizeFormatted() }})">
+                                    <i class="bi bi-download"></i> {{ $license->file_name }}
                                     <small class="text-muted">({{ $license->getFileSizeFormatted() }})</small>
                                 </a>
                             @else
@@ -59,10 +82,28 @@
                             @endif
                         </td>
                         <td>
-                            <a href="{{ route('pincodes.index', $license) }}" class="btn btn-sm btn-outline-primary">
-                                Пинкоды
-                            </a>
+                            @if(isset($showDeleted) && $showDeleted)
+                                <span>{{ $license->deleted_at->timezone('Europe/Moscow')->format('d.m.Y H:i') }}</span>
+                            @else
+                                <a href="{{ route('pincodes.index', $license) }}" class="btn btn-sm btn-outline-primary">
+                                    Пинкоды
+                                </a>
+                                @if(auth()->user()->isAdmin())
+                                    <button class="btn btn-sm btn-danger delete-license" 
+                                            data-id="{{ $license->id }}" 
+                                            data-name="{{ $license->number }}">
+                                        Удалить
+                                    </button>
+                                @endif
+                            @endif
                         </td>
+                        @if(isset($showDeleted) && $showDeleted)
+                            <td>
+                                <button class="btn btn-sm btn-success restore-license" data-id="{{ $license->id }}">
+                                    Восстановить
+                                </button>
+                            </td>
+                        @endif
                     </tr>
                     @endforeach
                 </tbody>
@@ -130,6 +171,26 @@
                     <button type="submit" class="btn btn-primary">Добавить лицензию</button>
                 </div>
             </form>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно подтверждения удаления -->
+<div class="modal fade" id="deleteLicenseModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Подтверждение удаления</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Вы уверены, что хотите удалить лицензию <strong id="deleteLicenseName"></strong>?</p>
+                <p class="text-muted">Лицензия будет помечена как удаленная и не будет отображаться в основном списке.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                <button type="button" class="btn btn-danger" id="confirmLicenseDelete">Удалить</button>
+            </div>
         </div>
     </div>
 </div>
@@ -284,6 +345,67 @@ $(document).ready(function() {
             $alert.alert('close');
         }, 5000);
     }
+
+    let currentLicenseId = null;
+
+    // Подтверждение удаления лицензии
+    $(document).on('click', '.delete-license', function() {
+        currentLicenseId = $(this).data('id');
+        const licenseName = $(this).data('name');
+        $('#deleteLicenseName').text(licenseName);
+        $('#deleteLicenseModal').modal('show');
+    });
+
+    $('#confirmLicenseDelete').click(function() {
+        if (currentLicenseId) {
+            $.ajax({
+                url: `/licenses/${currentLicenseId}`,
+                method: 'DELETE',
+                data: {
+                    _token: '{{ csrf_token() }}'
+                },
+                success: function(response) {
+                    if (response.success) {
+                        $('#deleteLicenseModal').modal('hide');
+                        showNotification(response.message, 'success');
+                        setTimeout(() => {
+                            window.location.reload();
+                        }, 1000);
+                    }
+                },
+                error: function(xhr) {
+                    const error = xhr.responseJSON?.message || 'Произошла ошибка при удалении';
+                    showNotification(error, 'error');
+                }
+            });
+        }
+    });
+
+    // Восстановление лицензии
+    $(document).on('click', '.restore-license', function() {
+        const licenseId = $(this).data('id');
+        
+        if (confirm('Вы уверены, что хотите восстановить эту лицензию?')) {
+            $.ajax({
+                url: `/licenses/${licenseId}/restore`,
+                method: 'POST',
+                data: {
+                    _token: '{{ csrf_token() }}'
+                },
+                success: function(response) {
+                    if (response.success) {
+                        showNotification(response.message, 'success');
+                        setTimeout(() => {
+                            window.location.reload();
+                        }, 1000);
+                    }
+                },
+                error: function(xhr) {
+                    showNotification('Произошла ошибка при восстановлении', 'error');
+                }
+            });
+        }
+    });
 });
 </script>
 

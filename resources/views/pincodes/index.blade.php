@@ -23,7 +23,57 @@
         </a>
     </div>
 </div>
-
+{{-- Информация о лицензии --}}
+<div class="card mb-4">
+    <div class="card-header bg-info text-white">
+        <h5 class="mb-0">Информация о лицензии</h5>
+    </div>
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-4">
+                <strong>Номер лицензии:</strong> {{ $license->number }}
+            </div>
+            <div class="col-md-4">
+                <strong>Организация:</strong> {{ $license->organization->name }}
+            </div>
+            <div class="col-md-4">
+                <strong>Продукт:</strong> {{ $license->product->name }}
+            </div>
+        </div>
+        <div class="row mt-2">
+            <div class="col-md-4">
+                <strong>Макс. количество:</strong> 
+                {{ $license->max_count ?? 'не ограничено' }}
+            </div>
+            <div class="col-md-4">
+                @php
+                    $activePincodes = $license->pincodes->where('status', 'active');
+                    $activeSingleCount = $activePincodes->where('type', 'single')->count();
+                    $activeMultiCount = $activePincodes->where('type', 'multi')->count();
+                @endphp
+                <strong>Активных однопользовательских:</strong> {{ $activeSingleCount }}
+            </div>
+            <div class="col-md-4">
+                <strong>Активных многопользовательских:</strong> {{ $activeMultiCount }}
+            </div>
+        </div>
+        
+        {{-- Предупреждения --}}
+        @if($activeMultiCount > 0)
+            <div class="alert alert-warning mt-3 mb-0">
+                <strong>Внимание!</strong> Активирован многопользовательский пинкод. Другие пинкоды этой лицензии не могут быть активированы.
+            </div>
+        @elseif($license->max_count !== null && $activeSingleCount >= $license->max_count)
+            <div class="alert alert-warning mt-3 mb-0">
+                <strong>Внимание!</strong> Достигнуто максимальное количество активаций ({{ $license->max_count }}). Новые пинкоды не могут быть активированы.
+            </div>
+        @elseif($activeSingleCount > 0)
+            <div class="alert alert-info mt-3 mb-0">
+                <strong>Информация:</strong> Активированы однопользовательские пинкоды. Многопользовательские пинкоды не могут быть активированы.
+            </div>
+        @endif
+    </div>
+</div>
 <div class="card">
     <div class="card-body">
         <div class="table-responsive">

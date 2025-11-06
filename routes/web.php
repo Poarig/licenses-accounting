@@ -24,6 +24,7 @@ Route::middleware(['auth'])->group(function () {
     // Licenses
     Route::get('/licenses', [LicenseController::class, 'index'])->name('licenses.index');
     Route::get('/organizations/{organization}/licenses', [LicenseController::class, 'organizationLicenses'])->name('licenses.organization');
+    Route::get('/licenses/{license}/download-file', [LicenseController::class, 'downloadFile'])->name('licenses.download-file');
     
     // Pincodes
     Route::get('/licenses/{license}/pincodes', [PincodeController::class, 'index'])->name('pincodes.index');

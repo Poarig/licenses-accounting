@@ -15,7 +15,6 @@ return new class extends Migration
         $table->id();
         $table->foreignId('product_id')->constrained()->onDelete('cascade');
         $table->integer('max_count');
-        $table->string('license_file')->nullable();
         $table->string('number');
         $table->foreignId('organization_id')->constrained()->onDelete('cascade');
         $table->timestamps();

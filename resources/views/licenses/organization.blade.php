@@ -2,85 +2,91 @@
 
 @section('content')
 <div class="d-flex justify-content-between align-items-center mb-4">
+    <h1>Лицензии организации: {{ $organization->name }}</h1>
     <div>
-        <h1>Лицензии организации: {{ $organization->name }}</h1>
-        <nav aria-label="breadcrumb">
-            <ol class="breadcrumb">
-                <li class="breadcrumb-item"><a href="{{ route('organizations.index') }}">Организации</a></li>
-                <li class="breadcrumb-item active">Лицензии</li>
-            </ol>
-        </nav>
-    </div>
-    <div>
-        <a href="{{ route('organizations.index') }}" class="btn btn-secondary me-2">Назад к организациям</a>
-        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addLicenseModal">
+        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#licenseModal">
             Добавить лицензию
         </button>
+        <a href="{{ route('licenses.index') }}" class="btn btn-secondary">
+            Все лицензии
+        </a>
     </div>
 </div>
 
-<div class="table-responsive">
-    <table class="table table-striped" id="licensesTable">
-        <thead>
-            <tr>
-                <th>ID</th>
-                <th>Продукт</th>
-                <th>Максимальное количество</th>
-                <th>Номер</th>
-                <th>Дата создания</th>
-                <th>Действия</th>
-            </tr>
-        </thead>
-        <tbody>
-            @foreach($licenses as $license)
-            <tr>
-                <td>{{ $license->id }}</td>
-                <td class="editable" 
-                    data-id="{{ $license->id }}"
-                    data-field="product_id"
-                    data-value="{{ $license->product_id }}">
-                    {{ $license->product->name }}
-                </td>
-                <td class="editable" 
-                    data-id="{{ $license->id }}"
-                    data-field="max_count"
-                    data-value="{{ $license->max_count }}">
-                    {{ $license->max_count ?? '—' }}
-                </td>
-                <td class="editable" 
-                    data-id="{{ $license->id }}"
-                    data-field="number"
-                    data-value="{{ $license->number }}">
-                    {{ $license->number }}
-                </td>
-                <td>{{ $license->created_at->format('d.m.Y') }}</td>
-                <td>
-                    <a href="{{ route('pincodes.index', $license) }}" 
-                       class="btn btn-sm btn-outline-primary">
-                        Пинкоды
-                    </a>
-                </td>
-            </tr>
-            @endforeach
-        </tbody>
-    </table>
+<div class="card">
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-striped table-hover">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Номер лицензии</th>
+                        <th>Продукт</th>
+                        <th>Макс. количество</th>
+                        <th>Файл лицензии</th>
+                        <th>Действия</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach($licenses as $license)
+                    <tr>
+                        <td>{{ $license->id }}</td>
+                        <td>
+                            <span class="editable" data-field="number" data-id="{{ $license->id }}">
+                                {{ $license->number }}
+                            </span>
+                        </td>
+                        <td>
+                            <span class="editable" data-field="product_id" data-id="{{ $license->id }}" data-value="{{ $license->product_id }}">
+                                {{ $license->product->name }}
+                            </span>
+                        </td>
+                        <td>
+                            <span class="editable" data-field="max_count" data-id="{{ $license->id }}">
+                                {{ $license->max_count ?? '—' }}
+                            </span>
+                        </td>
+                        <td>
+                            @if($license->hasFile())
+                                <a href="{{ route('licenses.download-file', $license) }}" 
+                                   class="btn btn-sm btn-outline-success download-file-link"
+                                   title="Скачать {{ $license->archive_name }} ({{ $license->getFileSizeFormatted() }})">
+                                    <i class="bi bi-download"></i> {{ $license->archive_name }}
+                                    <small class="text-muted">({{ $license->getFileSizeFormatted() }})</small>
+                                </a>
+                            @else
+                                <span class="text-muted">—</span>
+                            @endif
+                        </td>
+                        <td>
+                            <a href="{{ route('pincodes.index', $license) }}" class="btn btn-sm btn-outline-primary">
+                                Пинкоды
+                            </a>
+                        </td>
+                    </tr>
+                    @endforeach
+                </tbody>
+            </table>
+        </div>
+    </div>
 </div>
 
-<!-- Modal -->
-<div class="modal fade" id="addLicenseModal" tabindex="-1">
+<!-- Модальное окно для добавления лицензии -->
+<div class="modal fade" id="licenseModal" tabindex="-1">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title">Добавить лицензию</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
-            <form id="addLicenseForm">
-                <input type="hidden" name="organization_id" value="{{ $organization->id }}">
+            <form id="licenseForm" enctype="multipart/form-data">
                 <div class="modal-body">
+                    @csrf
+                    <input type="hidden" name="organization_id" value="{{ $organization->id }}">
                     <div class="row">
                         <div class="col-md-6 mb-3">
                             <label for="product_id" class="form-label">Продукт *</label>
-                            <select class="form-select" id="product_id" name="product_id" required>
+                            <select class="form-control" id="product_id" name="product_id" required>
                                 <option value="">Выберите продукт</option>
                                 @foreach($products as $product)
                                 <option value="{{ $product->id }}">{{ $product->name }}</option>
@@ -94,287 +100,229 @@
                             <div class="invalid-feedback"></div>
                         </div>
                     </div>
-
-                    <!-- Многопользовательская лицензия -->
-                    <div class="card mb-3">
-                        <div class="card-header bg-light">
-                            <h6 class="mb-0">Многопользовательская лицензия</h6>
-                        </div>
-                        <div class="card-body">
-                            <div class="mb-3">
-                                <label for="max_count" class="form-label">Максимальное количество пользователей</label>
-                                <input type="number" class="form-control" id="max_count" name="max_count" min="1">
-                                <div class="form-text">Необязательное поле</div>
-                                <div class="invalid-feedback"></div>
-                            </div>
-                            <div class="mb-3">
-                                <label for="multi_pincodes" class="form-label">Пинкоды (многопользовательские)</label>
-                                <textarea class="form-control" id="multi_pincodes" name="multi_pincodes" 
-                                          rows="3" placeholder="Введите пинкоды, каждый с новой строки"></textarea>
-                                <div class="form-text">Необязательное поле. Каждый пинкод с новой строки</div>
-                                <div class="invalid-feedback"></div>
-                            </div>
-                        </div>
+                    <div class="mb-3">
+                        <label for="max_count" class="form-label">Максимальное количество</label>
+                        <input type="number" class="form-control" id="max_count" name="max_count" min="1">
+                        <div class="invalid-feedback"></div>
                     </div>
-
-                    <!-- Однопользовательская лицензия -->
-                    <div class="card mb-3">
-                        <div class="card-header bg-light">
-                            <h6 class="mb-0">Однопользовательская лицензия</h6>
-                        </div>
-                        <div class="card-body">
-                            <div class="mb-3">
-                                <label for="single_pincodes" class="form-label">Пинкоды (однопользовательские)</label>
-                                <textarea class="form-control" id="single_pincodes" name="single_pincodes" 
-                                          rows="3" placeholder="Введите пинкоды, каждый с новой строки"></textarea>
-                                <div class="form-text">Необязательное поле. Каждый пинкод с новой строки</div>
-                                <div class="invalid-feedback"></div>
-                            </div>
-                        </div>
+                    <div class="mb-3">
+                        <label for="license_file" class="form-label">Файл лицензии (архив)</label>
+                        <input type="file" class="form-control" id="license_file" name="license_file" 
+                               accept=".zip,.rar,.7z,.tar,.gz">
+                        <div class="form-text">Допустимые форматы: ZIP, RAR, 7Z, TAR, GZ. Максимальный размер: 10MB</div>
+                        <div class="invalid-feedback"></div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="single_pincodes" class="form-label">Однопользовательские пинкоды</label>
+                        <textarea class="form-control" id="single_pincodes" name="single_pincodes" 
+                                  rows="4" placeholder="Введите пинкоды, каждый с новой строки"></textarea>
+                        <div class="form-text">По одному пинкоду на строку</div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="multi_pincodes" class="form-label">Многопользовательские пинкоды</label>
+                        <textarea class="form-control" id="multi_pincodes" name="multi_pincodes" 
+                                  rows="4" placeholder="Введите пинкоды, каждый с новой строки"></textarea>
+                        <div class="form-text">По одному пинкоду на строку</div>
                     </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
-                    <button type="submit" class="btn btn-primary">
-                        <span class="submit-text">Сохранить</span>
-                        <div class="spinner-border spinner-border-sm d-none" role="status">
-                            <span class="visually-hidden">Loading...</span>
-                        </div>
-                    </button>
+                    <button type="submit" class="btn btn-primary">Добавить лицензию</button>
                 </div>
             </form>
         </div>
     </div>
 </div>
+
 @endsection
 
 @section('scripts')
 <script>
 $(document).ready(function() {
-    // Inline редактирование для лицензий
-    $('#licensesTable').on('dblclick', '.editable', function() {
-        const $cell = $(this);
-        const id = $cell.data('id');
-        const field = $cell.data('field');
-        const value = $cell.data('value');
-        
-        let $input;
-        if (field === 'product_id') {
-            // Для продукта используем выпадающий список
-            $input = $(`
-                <select class="form-select editable-input">
-                    <option value="">Выберите продукт</option>
-                    @foreach($products as $product)
-                    <option value="{{ $product->id }}" ${'{{ $product->id }}' == value ? 'selected' : ''}>
-                        {{ $product->name }}
-                    </option>
-                    @endforeach
-                </select>
-            `);
-        } else {
-            const inputType = field === 'max_count' ? 'number' : 'text';
-            const minAttr = field === 'max_count' ? 'min="1"' : '';
-            const inputValue = field === 'max_count' && (value === 'null' || value === '') ? '' : value;
-            $input = $(`<input type="${inputType}" ${minAttr} class="form-control editable-input" value="${inputValue}">`);
-        }
-        
-        $input.css({
-            top: $cell.offset().top,
-            left: $cell.offset().left,
-            width: $cell.outerWidth(),
-            height: $cell.outerHeight()
-        });
-        
-        $('body').append($input);
-        $input.focus();
-        
-        function saveValue() {
-            const newValue = $input.val().trim();
-            const currentValue = value === 'null' || value === '' ? '' : value.toString();
-            
-            if (newValue !== currentValue) {
-                // Показываем индикатор загрузки
-                $cell.html('<div class="spinner-border spinner-border-sm" role="status"></div>');
-                
-                $.ajax({
-                    url: `/licenses/${id}/update-field`,
-                    method: 'POST',
-                    data: {
-                        field: field,
-                        value: newValue,
-                        _token: '{{ csrf_token() }}'
-                    },
-                    success: function(response) {
-                        if (response.success) {
-                            if (field === 'product_id') {
-                                const selectedText = $input.find('option:selected').text();
-                                $cell.text(selectedText);
-                            } else if (field === 'max_count') {
-                                $cell.text(newValue || '—');
-                            } else {
-                                $cell.text(newValue);
-                            }
-                            $cell.data('value', newValue);
-                            showNotification('Данные успешно обновлены', 'success');
-                        } else {
-                            // Восстанавливаем старое значение
-                            if (field === 'max_count' && (value === 'null' || value === '')) {
-                                $cell.text('—');
-                            } else {
-                                $cell.text(value);
-                            }
-                            showNotification(response.message || 'Ошибка обновления', 'error');
-                        }
-                    },
-                    error: function(xhr) {
-                        // Восстанавливаем старое значение
-                        if (field === 'max_count' && (value === 'null' || value === '')) {
-                            $cell.text('—');
-                        } else {
-                            $cell.text(value);
-                        }
-                        const response = xhr.responseJSON;
-                        if (response && response.errors) {
-                            showNotification(Object.values(response.errors)[0][0], 'error');
-                        } else {
-                            showNotification(response?.message || 'Ошибка обновления', 'error');
-                        }
-                    }
-                });
-            }
-            $input.remove();
-        }
-        
-        function cancelEdit() {
-            $input.remove();
-        }
-        
-        $input.on('keydown', function(e) {
-            if (e.key === 'Enter') {
-                saveValue();
-            } else if (e.key === 'Escape') {
-                cancelEdit();
-            }
-        });
-        
-        $input.on('blur', function() {
-            saveValue();
-        });
-    });
-    
-    // Добавление лицензии
-    $('#addLicenseForm').on('submit', function(e) {
+    // Обработка формы добавления лицензии
+    $('#licenseForm').on('submit', function(e) {
         e.preventDefault();
         
-        const $form = $(this);
-        const $submitBtn = $form.find('button[type="submit"]');
-        const $submitText = $submitBtn.find('.submit-text');
-        const $spinner = $submitBtn.find('.spinner-border');
+        const formData = new FormData(this);
         
-        // Показываем спиннер
-        $submitText.addClass('d-none');
-        $spinner.removeClass('d-none');
-        $submitBtn.prop('disabled', true);
-        
-        // Сбрасываем ошибки
-        $form.find('.is-invalid').removeClass('is-invalid');
-        $form.find('.invalid-feedback').text('');
-        
-        const formData = {
-            product_id: $('#product_id').val(),
-            max_count: $('#max_count').val(),
-            number: $('#number').val(),
-            organization_id: {{ $organization->id }},
-            single_pincodes: $('#single_pincodes').val(),
-            multi_pincodes: $('#multi_pincodes').val(),
-            _token: '{{ csrf_token() }}'
-        };
-        
-        console.log('Отправка данных лицензии:', formData);
+        // Показываем индикатор загрузки
+        const submitBtn = $(this).find('button[type="submit"]');
+        const originalText = submitBtn.html();
+        submitBtn.html('<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Добавление...');
+        submitBtn.prop('disabled', true);
         
         $.ajax({
             url: '/licenses',
             method: 'POST',
             data: formData,
+            processData: false,
+            contentType: false,
             success: function(response) {
-                console.log('Ответ сервера:', response);
-                
-                // Восстанавливаем кнопку
-                $submitText.removeClass('d-none');
-                $spinner.addClass('d-none');
-                $submitBtn.prop('disabled', false);
-                
                 if (response.success) {
-                    $('#addLicenseModal').modal('hide');
+                    $('#licenseModal').modal('hide');
+                    $('#licenseForm')[0].reset();
                     showNotification(response.message, 'success');
                     setTimeout(() => {
-                        location.reload();
-                    }, 1500);
-                } else {
-                    showNotification(response.message || 'Ошибка при добавлении лицензии', 'error');
+                        window.location.reload();
+                    }, 1000);
                 }
             },
             error: function(xhr) {
                 // Восстанавливаем кнопку
-                $submitText.removeClass('d-none');
-                $spinner.addClass('d-none');
-                $submitBtn.prop('disabled', false);
+                submitBtn.html(originalText);
+                submitBtn.prop('disabled', false);
                 
-                const response = xhr.responseJSON;
-                console.log('Ошибка ответа:', response);
-                
-                if (response && response.errors) {
-                    // Показываем ошибки валидации
-                    for (const field in response.errors) {
-                        const $field = $(`#${field}`);
-                        $field.addClass('is-invalid');
-                        $field.siblings('.invalid-feedback').text(response.errors[field][0]);
+                const errors = xhr.responseJSON?.errors;
+                if (errors) {
+                    for (const field in errors) {
+                        $(`#${field}`).addClass('is-invalid');
+                        $(`#${field}`).siblings('.invalid-feedback').text(errors[field][0]);
                     }
-                    showNotification('Исправьте ошибки в форме', 'error');
                 } else {
-                    showNotification(response?.message || 'Ошибка сети или сервера', 'error');
+                    showNotification('Произошла ошибка при добавлении лицензии', 'error');
                 }
             }
         });
     });
-    
-    // Сброс формы при закрытии модального окна
-    $('#addLicenseModal').on('hidden.bs.modal', function() {
-        $('#addLicenseForm')[0].reset();
-        $('#addLicenseForm .form-control, #addLicenseForm .form-select').removeClass('is-invalid');
-        $('#addLicenseForm .invalid-feedback').text('');
+
+    // Inline-редактирование
+    $(document).on('click', '.editable', function() {
+        const field = $(this).data('field');
+        const id = $(this).data('id');
+        const currentValue = $(this).data('value') || $(this).text().trim();
         
-        const $submitBtn = $('#addLicenseForm button[type="submit"]');
-        $submitBtn.find('.submit-text').removeClass('d-none');
-        $submitBtn.find('.spinner-border').addClass('d-none');
-        $submitBtn.prop('disabled', false);
+        let $input;
+        if (field === 'product_id') {
+            // Для продукта показываем выпадающий список
+            $input = $(`<select class="form-control editable-input">
+                @foreach($products as $product)
+                <option value="{{ $product->id }}">{{ $product->name }}</option>
+                @endforeach
+            </select>`).val(currentValue);
+        } else {
+            $input = $('<input type="' + (field === 'max_count' ? 'number' : 'text') + '" class="form-control editable-input">')
+                .val(currentValue);
+        }
+        
+        $input.css({
+            top: $(this).offset().top,
+            left: $(this).offset().left,
+            width: $(this).outerWidth(),
+            height: $(this).outerHeight()
+        });
+        
+        $('body').append($input);
+        $input.focus();
+        
+        $input.on('blur keypress', function(e) {
+            if (e.type === 'blur' || (e.type === 'keypress' && e.which === 13)) {
+                const newValue = $input.val().trim();
+                if (newValue !== currentValue && newValue !== '') {
+                    $.ajax({
+                        url: `/licenses/${id}/update-field`,
+                        method: 'POST',
+                        data: {
+                            _token: '{{ csrf_token() }}',
+                            field: field,
+                            value: newValue
+                        },
+                        success: function(response) {
+                            if (response.success) {
+                                showNotification(response.message, 'success');
+                                setTimeout(() => {
+                                    window.location.reload();
+                                }, 1000);
+                            }
+                        },
+                        error: function(xhr) {
+                            const errors = xhr.responseJSON?.errors;
+                            if (errors) {
+                                let errorMessage = 'Ошибка обновления:\n';
+                                for (const field in errors) {
+                                    errorMessage += errors[field][0] + '\n';
+                                }
+                                showNotification(errorMessage, 'error');
+                            }
+                        }
+                    });
+                }
+                $input.remove();
+            }
+        });
     });
-    
-    // Сброс ошибок при вводе
-    $('#addLicenseForm input, #addLicenseForm select, #addLicenseForm textarea').on('input change', function() {
+
+    // Сброс валидации при закрытии модального окна
+    $('#licenseModal').on('hidden.bs.modal', function () {
+        $('#licenseForm input, #licenseForm select').removeClass('is-invalid');
+        $('#licenseForm .invalid-feedback').text('');
+    });
+
+    // Сброс ошибок при вводе в модальном окне
+    $('#licenseForm input, #licenseForm select, #licenseForm textarea').on('input change', function() {
         $(this).removeClass('is-invalid');
         $(this).siblings('.invalid-feedback').text('');
     });
-});
 
-function showNotification(message, type = 'info') {
-    const alertClass = type === 'success' ? 'alert-success' : 
-                      type === 'error' ? 'alert-danger' : 'alert-info';
-    
-    const $alert = $(`
-        <div class="alert ${alertClass} alert-dismissible fade show position-fixed" 
-             style="top: 20px; right: 20px; z-index: 1060; min-width: 300px;">
-            ${message}
-            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-        </div>
-    `);
-    
-    $('body').append($alert);
-    
-    // Автоматическое закрытие через 5 секунд
-    setTimeout(() => {
-        $alert.alert('close');
-    }, 5000);
-}
+    function showNotification(message, type = 'info') {
+        // Удаляем предыдущие уведомления
+        $('.alert-dismissible.position-fixed').remove();
+        
+        const alertClass = type === 'success' ? 'alert-success' : 
+                          type === 'error' ? 'alert-danger' : 'alert-info';
+        
+        const $alert = $(`
+            <div class="alert ${alertClass} alert-dismissible fade show position-fixed" 
+                 style="top: 20px; right: 20px; z-index: 1060; min-width: 300px;">
+                ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        `);
+        
+        $('body').append($alert);
+        
+        setTimeout(() => {
+            $alert.alert('close');
+        }, 5000);
+    }
+});
 </script>
+
+<style>
+.download-file-link {
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.875rem;
+    max-width: 300px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.download-file-link:hover {
+    text-decoration: none;
+}
+.editable:hover {
+    background-color: #f8f9fa;
+    cursor: pointer;
+    border-radius: 3px;
+    padding: 2px 4px;
+}
+.editable-input {
+    position: absolute;
+    z-index: 1000;
+    background: white;
+    border: 1px solid #0d6efd;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    border-radius: 4px;
+}
+.spinner-border-sm {
+    width: 1rem;
+    height: 1rem;
+}
+.table th {
+    font-weight: 600;
+    background-color: #f8f9fa;
+}
+</style>
 @endsection

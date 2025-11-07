@@ -73,8 +73,8 @@
                             @if($license->hasFile())
                                 <a href="{{ route('licenses.download-file', $license) }}" 
                                    class="btn btn-sm btn-outline-success download-file-link"
-                                   title="Скачать {{ $license->file_name }} ({{ $license->getFileSizeFormatted() }})">
-                                    <i class="bi bi-download"></i> {{ $license->file_name }}
+                                   title="Скачать {{ $license->archive_name }} ({{ $license->getFileSizeFormatted() }})">
+                                    <i class="bi bi-download"></i> {{ $license->archive_name }}
                                     <small class="text-muted">({{ $license->getFileSizeFormatted() }})</small>
                                 </a>
                             @else
